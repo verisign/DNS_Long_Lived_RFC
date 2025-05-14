@@ -42,7 +42,7 @@ organization = "Verisign Labs"
 
 .# Abstract
 
-This document details some best practices for Application Service Providers who allow associations between a global DNS domain name and use case specific references using DNSSEC to provide a globally consistent, cryptographically verifiable association.  Such a mechanism is needed when nonce-based domain control validation is not practical, such as use cases where each participant wants to confirm the association independently.  As such, no single Application Service Provider exists to provide and validate a nonce to prove domain control that would satisfy other participating Application Service Providers.  
+This document details some best practices for Application Service Providers who allow associations between a global DNS domain name and use case specific references optionally using DNSSEC to provide a globally consistent, cryptographically verifiable association.  Such a mechanism is needed when nonce-based domain control validation is not practical, such as use cases where each participant wants to confirm the association independently.  As such, no single Application Service Provider exists to provide and validate a nonce to prove domain control that would satisfy other participating Application Service Providers.  
 
 {mainmatter}
 
@@ -51,7 +51,7 @@ Some Application Service Providers support using a global DNS domain name in the
 
 Where a nonce-based approach is not practical, Application Service Providers have been observed requiring users to store use case specific references that do not include nonces in one or more DNS records.  This is used to establish an association between the domain name and the user's presence for that use case.  The records set by the user are then persisted for as long as the user continues to opt into this association, much like how A or AAAA records are persisted for as long as a user is using the IP addresses to host their domain name.
 
-This approach has found traction in several contexts, such as those described in (#appendix).  One example is certificate issuance using the Certification Authority Authorization (CAA) record found in [@RFC8659] and the proposed cryptographically-constrained domain validation found in [@I-D.birgelee-lamps-caa-security].  For this use case, the domain name is associated with one or more certificate authorities who are authorized to issue certificates for that domain name.  The CAA record can limit certificate mis-issuance risks but does require all certificate authorities have the ability to check the CAA record and observe the same record data to achieve this outcome.
+This approach has found traction in several contexts, such as those described in (#appendix).  One example is certificate issuance using the Certification Authority Authorization (CAA) record found in [@RFC8659] and the proposed cryptographically-constrained domain validation found in [@I-D.ietf-lamps-caa-security].  For this use case, the domain name is associated with one or more certificate authorities who are authorized to issue certificates for that domain name.  The CAA record can limit certificate mis-issuance risks but does require all certificate authorities have the ability to check the CAA record and observe the same record data to achieve this outcome.
 
 Another example is the use of domain names as social media handles, e.g., as seen in the Authenticated Transfer (AT) Protocol that powers decentralized social media applications like Bluesky [@atproto].  For this use case, the domain name is associated with an AT Protocol identifier via a TXT record or HTTPS well-known endpoint.  Any Application Service Provider in the AT Protocol ecosystem, such as Bluesky, can then use the domain name as a user's handle by checking this association.
 
@@ -60,9 +60,9 @@ Support for these use cases is not without challenges. First, Application Servic
 This document provides some best practices to ensure that persistent references are appropriately maintained when using DNS-based methods.  Other methods such as those based on HTTP are out of scope.
 
 ## Contrast with Domain Control Validation {#dcv}
-The primary difference between this document and the best practices for Domain Control Validation (DCV) in [@I-D.ietf-dnsop-domain-verification-techniques] is the persistence and content of the information used to associate a domain name with the user's presence at an Application Service Provider. DCV uses time-bound random tokens, i.e., nonces, to indicate that a user controls a domain name at a point in time.  This is in contrast to the persistent association stored in DNS that is described here which uses DNSSEC to authenticate the user's ongoing intent to associate the domain name with a particular use case.
+The primary difference between this document and the best practices for Domain Control Validation (DCV) in [@I-D.ietf-dnsop-domain-verification-techniques] is the persistence and content of the information used to associate a domain name with the user's presence at an Application Service Provider. DCV uses time-bound random tokens, i.e., nonces, to indicate that a user controls a domain name at a point in time.  This is in contrast to the persistent association stored in DNS that is described here which uses DNS authenticate the user's ongoing intent to associate the domain name with a particular use case.
 
-There are scalability challenges when attempting to use DCV for persistent references.  For example, if there are N independent Application Service Providers for a particular use case, then at least N independent nonces may be needed so that the user can prove to each provider that they control the domain name.  Additionally, nonce-based challenges would need to be re-issued as often as each Application Service Provider wants to re-verify the association.  If N or the rate of re-issuance is too high, the workload can quickly become impractical for a user to maintain.  This contrasts with this document where the requirement to use DNSSEC supports a globally consistent view of the associations regardless of how large N is.
+There are scalability challenges when attempting to use DCV for persistent references.  For example, if there are N independent Application Service Providers for a particular use case, then at least N independent nonces may be needed so that the user can prove to each provider that they control the domain name.  Additionally, nonce-based challenges would need to be re-issued as often as each Application Service Provider wants to re-verify the association.  If N or the rate of re-issuance is too high, the workload can quickly become impractical for a user to maintain.  This contrasts with this document that supports a globally consistent view of the associations regardless of how large N is.
 
 ## Conventions and Definitions
 The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in BCP 14 [@!RFC2119] [@!RFC8174] when, and only when, they appear in all capitals, as shown here.
@@ -84,20 +84,22 @@ It is RECOMMENDED that Application Service Providers use an underscore scoped "\
 
 Application Service Providers can also use multiple labels to support additional features using a similar approach as described in [@I-D.ietf-dnsop-domain-verification-techniques] but applied to the persistent label, e.g., "\_<FEATURE>.\_<USE_CASE_RELEVANT_NAME>-persist".
 
+Application Service Providers SHOULD use a label contained in the IANA registry specified by [@RFC8552]. Application Service Providers SHOULD use a TXT record type to contain validation data and SHOULD follow CNAMEs when retrieving these records.
+
 
 ## DNSSEC Requirements
-Application Service Providers MUST use DNSSEC or its successor ([@RFC9364]) and provide mechanisms that ensure only valid DNSSEC signatures covering the expected DNS resource records are accepted for use.  
+Application Service Providers MUST validate DNS records using DNSSEC or its successor ([@RFC9364]). DNSSEC validation failures SHOULD start the process of de-associating a domain name in an Application Service Provider as it relates to a particular use case or trigger processes to re-evaluate the association.  How exactly this occurs is left to the Application Service Provider.
 
-DNSSEC validation failures SHOULD start the process of de-associating a domain name in an Application Service Provider as it relates to a particular use case or trigger processes to re-evaluate the association.  How exactly this occurs is left to the Application Service Provider.
-
-The use of DNSSEC is REQUIRED for two reasons.  First, it provides for global consistency such that any Application Service Provider that is given a DNSSEC signed record can cryptographically verify its authenticity.  Second, DNSSEC mitigates spoofing attacks based on forged response data.  Such a spoofing attack could lead to scenarios where a domain name is erroneously associated with another user's application presence.  The requirement to perform periodic checks, described in (#periodic_check), implies such a spoofing attack will eventually be identified.  DNSSEC can reliably prevent the attack in the first place as it relates to forged response data.
-
-It is RECOMMENDED that Application Service Providers provide at least one other method for authenticating persistent references to accommodate domain names for which DNSSEC support for this purpose is not available.  This ensures that such domain names have other mechanisms to participate.  Non-limiting examples include HTTP-based approaches such as the HTTP-01 ACME challenge or AT Protocol's use of well-known endpoints.
+Domains SHOULD DNSSEC sign persistent references for two reasons.  First, it provides for global consistency such that any Application Service Provider that is given a DNSSEC signed record can cryptographically verify its authenticity.  Second, DNSSEC mitigates spoofing attacks based on forged response data.  Such a spoofing attack could lead to scenarios where a domain name is erroneously associated with another user's application presence.  The requirement to perform periodic checks, described in (#periodic_check), implies such a spoofing attack will eventually be identified.  DNSSEC can reliably prevent the attack in the first place as it relates to forged response data.
 
 ## Periodic Confirmation {#periodic_check}
 Application Service Providers MUST periodically check that any associated domain name is still associated with the use case, e.g., by checking for the presence of the expected DNS record(s) and their DNSSEC signatures.  This ensures the Application Service Provider will eventually identify changes that impact the use of the domain name for their use cases.  
 
 The frequency of this check will vary by use case and is left to the discretion of the Application Service Provider.
+
+## Attestation of DNSSEC-Signed Requirements
+
+A service provider MAY provide a DNSSEC signature chain as attestation to an offline 3rd party to prove the association of a domain name to a service provider at a point in time. If the domain name is not DNSSEC signed, the service provider MAY provide a DNSSEC chain proving the domain name was not DNSSEC signed.
 
 # Security Considerations {#security_considerations}
 
